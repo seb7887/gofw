@@ -1,0 +1,19 @@
+# MacOS
+.DS_Store
+
+# IDEs
+.idea
+.vscode
+
+# Go
+bin
+*.out
+*.test
+go.work
+go.work.sum
+coverage
+
+# Miscellaneous
+*.html
+*.zip
+.env
