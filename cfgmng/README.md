@@ -3,7 +3,7 @@ cfgmng is a lightweight Go package that simplifies loading configuration from YA
 
 ## Installation
 ```sh
-go get github.com/yourusername/cfgmng
+go get github.com/seb7887/gofw/cfgmng
 ```
 ## Usage
 1. Define Your Configuration Struct
