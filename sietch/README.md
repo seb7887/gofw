@@ -1,6 +1,6 @@
-# Sietch
+# sietch
 
-**Sietch** is a Go package that provides a unified, generic repository interface for performing CRUD operations across multiple database backends. Using Go generics and reflection, Sietch enables you to write data-access code in a backend-agnostic manner. Out-of-the-box implementations include:
+**sietch** is a Go package that provides a unified, generic repository interface for performing CRUD operations across multiple database backends. Using Go generics and reflection, Sietch enables you to write data-access code in a backend-agnostic manner. Out-of-the-box implementations include:
 
 - **InMemoryRepository**: Useful for testing and business logic prototyping.
 - **CockroachRepository**: A generic implementation for CockroachDB using [pgxpool](https://github.com/jackc/pgx) that supports real CRUD operations.
