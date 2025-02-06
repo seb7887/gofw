@@ -12,7 +12,7 @@ import (
 type CockroachDBConnector[T any, ID comparable] struct {
 	pool      *pgxpool.Pool
 	tableName string
-	getID     func() ID
+	getID     func(*T) ID
 	columns   []string
 }
 
@@ -21,7 +21,7 @@ func NewCockroachDBConnPool(ctx context.Context, dsn string) (*pgxpool.Pool, err
 }
 
 // NewCockroachDBConnector CockroackDB implementation of Repository interface
-func NewCockroachDBConnector[T any, ID comparable](pool *pgxpool.Pool, tableName string, getID func() ID) (*CockroachDBConnector[T, ID], error) {
+func NewCockroachDBConnector[T any, ID comparable](pool *pgxpool.Pool, tableName string, getID func(*T) ID) (*CockroachDBConnector[T, ID], error) {
 	columns, err := getColumns[T]()
 	if err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func (r *CockroachDBConnector[T, ID]) Update(ctx context.Context, item *T) error
 		numCols+1,
 	)
 
-	id := r.getID()
+	id := r.getID(item)
 	args := append(values[1:], id)
 	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
@@ -292,7 +292,7 @@ func (r *CockroachDBConnector[T, ID]) BatchUpdate(ctx context.Context, items []T
 			return err
 		}
 
-		id := r.getID()
+		id := r.getID(&item)
 		args := append(values[1:], id)
 		ct, err := r.pool.Exec(ctx, "batch_update_stmt", args...)
 		if err != nil {
