@@ -1,6 +1,7 @@
 package sietch
 
 import (
+	"fmt"
 	"github.com/seb7887/gofw/sietch/internal/testutils"
 	"testing"
 )
@@ -72,5 +73,32 @@ func TestCockroachDBConnector_getScanDestinations(t *testing.T) {
 
 	if len(d) != 2 {
 		t.Errorf("getScanDestinations returned %d destinations, expected 2", len(d))
+	}
+}
+
+func TestCockroachDBConnector_builQuery(t *testing.T) {
+	conn, err := NewCockroachDBConnector[testutils.Account, int64](
+		nil,
+		"test",
+		func(t *testutils.Account) int64 {
+			return t.ID
+		})
+
+	if err != nil {
+		t.Errorf("NewCockroachDBConnector returned error: %s", err)
+	}
+
+	fmt.Println(joinColumns(conn.columns))
+	fmt.Println("ok")
+
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+		conn.tableName,
+		joinColumns(conn.columns),
+		buildPlaceholders(len(conn.columns)),
+	)
+
+	expected := "INSERT INTO test (id, balance) VALUES ($1, $2)"
+	if query != expected {
+		t.Errorf("expected: %s, got: %s", expected, query)
 	}
 }

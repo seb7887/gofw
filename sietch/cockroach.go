@@ -68,7 +68,7 @@ func joinColumns(columns []string) string {
 func buildPlaceholders(n int) string {
 	placeholders := make([]string, n)
 	for i := 0; i < n; i++ {
-		placeholders[i-1] = fmt.Sprintf("$%d", i)
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 	return strings.Join(placeholders, ", ")
 }
