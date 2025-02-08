@@ -104,7 +104,7 @@ func (r *CockroachDBConnector[T, ID]) getScanDestinations(ptr *T) ([]any, error)
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		tag := field.Tag.Get("db")
-		if tag == "" {
+		if tag != "" {
 			dests = append(dests, v.Field(i).Addr().Interface())
 		}
 	}
