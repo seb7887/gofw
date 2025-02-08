@@ -88,9 +88,6 @@ func TestCockroachDBConnector_builQuery(t *testing.T) {
 		t.Errorf("NewCockroachDBConnector returned error: %s", err)
 	}
 
-	fmt.Println(joinColumns(conn.columns))
-	fmt.Println("ok")
-
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		conn.tableName,
 		joinColumns(conn.columns),
@@ -98,6 +95,35 @@ func TestCockroachDBConnector_builQuery(t *testing.T) {
 	)
 
 	expected := "INSERT INTO test (id, balance) VALUES ($1, $2)"
+	if query != expected {
+		t.Errorf("expected: %s, got: %s", expected, query)
+	}
+}
+
+func TestCockroachDBConnector_queryBuilder(t *testing.T) {
+	conn, err := NewCockroachDBConnector[testutils.Account, int64](
+		nil,
+		"test",
+		func(t *testutils.Account) int64 {
+			return t.ID
+		})
+
+	if err != nil {
+		t.Errorf("NewCockroachDBConnector returned error: %s", err)
+	}
+
+	filter := &Filter{
+		Conditions: []Condition{
+			{
+				Field:    "email",
+				Operator: "=",
+				Value:    "test@test.com",
+			},
+		},
+	}
+
+	query, _ := conn.queryBuilder(filter)
+	expected := "SELECT id, balance FROM test WHERE email = $1"
 	if query != expected {
 		t.Errorf("expected: %s, got: %s", expected, query)
 	}

@@ -182,23 +182,7 @@ func (r *CockroachDBConnector[T, ID]) BatchCreate(ctx context.Context, items []T
 }
 
 func (r *CockroachDBConnector[T, ID]) Query(ctx context.Context, filter *Filter) ([]T, error) {
-	whereClause := ""
-	var args []any
-	for i, condition := range filter.Conditions {
-		if i == 0 {
-			whereClause = "WHERE "
-		} else {
-			whereClause += " AND "
-		}
-		whereClause += fmt.Sprintf("%s %s %d", condition.Field, condition.Operator, i+1)
-		args = append(args, condition.Value)
-	}
-
-	query := fmt.Sprintf("SELECT %s FROM %s %s",
-		joinColumns(r.columns),
-		r.tableName,
-		whereClause,
-	)
+	query, args := r.queryBuilder(filter)
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -359,4 +343,26 @@ func (r *CockroachDBConnector[T, ID]) BatchDelete(ctx context.Context, items []I
 	}
 
 	return nil
+}
+
+func (r *CockroachDBConnector[T, ID]) queryBuilder(filter *Filter) (string, []any) {
+	whereClause := ""
+	var args []any
+	for i, condition := range filter.Conditions {
+		if i == 0 {
+			whereClause = "WHERE "
+		} else {
+			whereClause += " AND "
+		}
+		whereClause += fmt.Sprintf("%s %s $%d", condition.Field, condition.Operator, i+1)
+		args = append(args, condition.Value)
+	}
+
+	query := fmt.Sprintf("SELECT %s FROM %s %s",
+		joinColumns(r.columns),
+		r.tableName,
+		whereClause,
+	)
+
+	return query, args
 }
