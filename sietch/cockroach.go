@@ -86,7 +86,7 @@ func (r *CockroachDBConnector[T, ID]) getValues(item *T) ([]any, error) {
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		tag := field.Tag.Get("db")
-		if tag == "" {
+		if tag != "" {
 			values = append(values, v.Field(i).Interface())
 		}
 	}
