@@ -49,7 +49,7 @@ func getColumns[T any]() ([]string, error) {
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		tag := field.Tag.Get("db")
-		if tag == "" {
+		if tag != "" {
 			columns = append(columns, tag)
 		}
 	}
