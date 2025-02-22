@@ -19,3 +19,17 @@ type retrier struct {
 func NewRetrier(backoff Backoff) Retrier {
 	return &retrier{backoff: backoff}
 }
+
+func (r *retrier) NextInterval(retry int) time.Duration {
+	return r.backoff.Next(retry)
+}
+
+type noRetrier struct{}
+
+func NewNoRetrier() Retrier {
+	return &noRetrier{}
+}
+
+func (r *noRetrier) NextInterval(retry int) time.Duration {
+	return 0 * time.Millisecond
+}

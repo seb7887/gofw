@@ -13,6 +13,7 @@ type client struct {
 	c          Doer
 	timeout    time.Duration
 	retryCount int
+	retrier    Retrier
 	plugins    []Plugin
 }
 
@@ -27,6 +28,7 @@ func NewClient(opts ...Option) Client {
 	c := &client{
 		timeout:    _defaultTimeout,
 		retryCount: _defaultRetryCount,
+		retrier:    NewNoRetrier(),
 	}
 
 	for _, opt := range opts {
@@ -121,7 +123,7 @@ func (c *client) Do(request *http.Request) (*http.Response, error) {
 
 	for i := 0; i <= c.retryCount; i++ {
 		if response != nil {
-			response.Body.Close()
+			_ = response.Body.Close()
 		}
 
 		c.reportRequestStart(request)
