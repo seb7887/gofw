@@ -6,37 +6,37 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-type NatsConn[T Message] struct {
+var _ Bus = (*NatsConn)(nil)
+
+type NatsConn struct {
 	nc *nats.Conn
 }
 
-func NewNatsBus[T Message](url string) (*NatsConn[T], error) {
+func NewNatsBus(url string) (*NatsConn, error) {
 	nc, err := nats.Connect(url)
 	if err != nil {
 		return nil, err
 	}
-	return &NatsConn[T]{nc: nc}, nil
+	return &NatsConn{nc: nc}, nil
 }
 
-func (eb *NatsConn[T]) Publish(topic string, msg Message) error {
-	return eb.nc.Publish(topic, msg.Serialize())
+func (eb *NatsConn) Publish(topic string, msg any) error {
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return eb.nc.Publish(topic, b)
 }
 
-func (eb *NatsConn[T]) Subscribe(topic string, handler MessageReceiver) {
+func (eb *NatsConn) Subscribe(topic string, handler MessageReceiver) {
 	_, err := eb.nc.Subscribe(topic, eb.consumedMessages(context.Background(), handler.Receive))
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (eb *NatsConn[T]) consumedMessages(ctx context.Context, receiver func(ctx context.Context, msg Message)) func(*nats.Msg) {
+func (eb *NatsConn) consumedMessages(ctx context.Context, receiver func(ctx context.Context, msg any)) func(*nats.Msg) {
 	return func(msg *nats.Msg) {
-		receiver(ctx, deserialize[T](msg))
+		receiver(ctx, msg.Data)
 	}
-}
-
-func deserialize[T any](message *nats.Msg) T {
-	var msg T
-	_ = json.Unmarshal(message.Data, &msg)
-	return msg
 }

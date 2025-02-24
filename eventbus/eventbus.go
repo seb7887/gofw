@@ -2,17 +2,11 @@ package eventbus
 
 import "context"
 
-type Bus[T Message] interface {
-	Publish(topic string, msg Message) error
+type Bus interface {
+	Publish(topic string, msg any) error
 	Subscribe(topic string, handler MessageReceiver)
 }
 
-type Message interface {
-	Headers() map[string]string
-	Payload() []byte
-	Serialize() []byte
-}
-
 type MessageReceiver interface {
-	Receive(ctx context.Context, msg Message)
+	Receive(ctx context.Context, msg any)
 }

@@ -2,17 +2,19 @@ package eventbus
 
 import "context"
 
+var _ Bus = (*InMem)(nil)
+
 type InMem struct {
-	ch chan Message
+	ch chan any
 }
 
 func NewInMemBus() *InMem {
 	return &InMem{
-		ch: make(chan Message, 100),
+		ch: make(chan any, 100),
 	}
 }
 
-func (b *InMem) Publish(_ string, msg Message) error {
+func (b *InMem) Publish(_ string, msg any) error {
 	b.ch <- msg
 	return nil
 }
