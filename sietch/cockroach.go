@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pkg/errors"
 	"reflect"
 	"strings"
 )
@@ -20,11 +19,46 @@ func NewCockroachDBConnPool(ctx context.Context, dsn string) (*pgxpool.Pool, err
 	return pgxpool.New(ctx, dsn)
 }
 
-// NewCockroachDBConnector CockroackDB implementation of Repository interface
+func sanitizeIdentifier(name string) error {
+	if name == "" {
+		return fmt.Errorf("identifier cannot be empty")
+	}
+	// Solo permitir letras, números, guiones bajos
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '_') {
+			return fmt.Errorf("invalid character in identifier: %c", r)
+		}
+	}
+	return nil
+}
+
+func quoteIdentifier(name string) string {
+	return `"` + name + `"`
+}
+
+// NewCockroachDBConnector CockroachDB implementation of Repository interface
 func NewCockroachDBConnector[T any, ID comparable](pool *pgxpool.Pool, tableName string, getID func(*T) ID) (*CockroachDBConnector[T, ID], error) {
+	if pool == nil {
+		return nil, fmt.Errorf("pool cannot be nil")
+	}
+	if getID == nil {
+		return nil, fmt.Errorf("getID function cannot be nil")
+	}
+	if err := sanitizeIdentifier(tableName); err != nil {
+		return nil, fmt.Errorf("invalid table name: %w", err)
+	}
+	
 	columns, err := getColumns[T]()
 	if err != nil {
 		return nil, err
+	}
+	
+	// Validar nombres de columnas
+	for _, col := range columns {
+		if err := sanitizeIdentifier(col); err != nil {
+			return nil, fmt.Errorf("invalid column name '%s': %w", col, err)
+		}
 	}
 
 	return &CockroachDBConnector[T, ID]{
@@ -63,6 +97,14 @@ func getColumns[T any]() ([]string, error) {
 
 func joinColumns(columns []string) string {
 	return strings.Join(columns, ", ")
+}
+
+func joinQuotedColumns(columns []string) string {
+	quoted := make([]string, len(columns))
+	for i, col := range columns {
+		quoted[i] = quoteIdentifier(col)
+	}
+	return strings.Join(quoted, ", ")
 }
 
 func buildPlaceholders(n int) string {
@@ -121,8 +163,8 @@ func (r *CockroachDBConnector[T, ID]) Create(ctx context.Context, item *T) error
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		r.tableName,
-		joinColumns(r.columns),
+		quoteIdentifier(r.tableName),
+		joinQuotedColumns(r.columns),
 		buildPlaceholders(len(r.columns)),
 	)
 	_, err = r.pool.Exec(ctx, query, values...)
@@ -132,9 +174,9 @@ func (r *CockroachDBConnector[T, ID]) Create(ctx context.Context, item *T) error
 func (r *CockroachDBConnector[T, ID]) Get(ctx context.Context, id ID) (*T, error) {
 	var t T
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = $1",
-		joinColumns(r.columns),
-		r.tableName,
-		r.columns[0],
+		joinQuotedColumns(r.columns),
+		quoteIdentifier(r.tableName),
+		quoteIdentifier(r.columns[0]),
 	)
 	row := r.pool.QueryRow(ctx, query, id)
 	dests, err := r.getScanDestinations(&t)
@@ -155,15 +197,20 @@ func (r *CockroachDBConnector[T, ID]) BatchCreate(ctx context.Context, items []T
 
 	defer func() {
 		if err != nil {
-			_ = tx.Rollback(ctx)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				// TODO: Log rollback error: rollbackErr
+			}
 		} else {
-			_ = tx.Commit(ctx)
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				// TODO: Log commit error: commitErr
+				err = commitErr // Set error so it gets returned
+			}
 		}
 	}()
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		r.tableName,
-		joinColumns(r.columns),
+		quoteIdentifier(r.tableName),
+		joinQuotedColumns(r.columns),
 		buildPlaceholders(len(r.columns)),
 	)
 
@@ -182,6 +229,9 @@ func (r *CockroachDBConnector[T, ID]) BatchCreate(ctx context.Context, items []T
 }
 
 func (r *CockroachDBConnector[T, ID]) Query(ctx context.Context, filter *Filter) ([]T, error) {
+	if filter == nil {
+		return nil, fmt.Errorf("filter cannot be nil")
+	}
 	query, args := r.queryBuilder(filter)
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -214,13 +264,13 @@ func (r *CockroachDBConnector[T, ID]) Update(ctx context.Context, item *T) error
 	var setClause []string
 	numCols := len(r.columns)
 	for i := 1; i < numCols; i++ {
-		setClause = append(setClause, fmt.Sprintf("%s = $%d", r.columns[i], i))
+		setClause = append(setClause, fmt.Sprintf("%s = $%d", quoteIdentifier(r.columns[i]), i))
 	}
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = $%d",
-		r.tableName,
+		quoteIdentifier(r.tableName),
 		strings.Join(setClause, ", "),
-		r.columns[0],
+		quoteIdentifier(r.columns[0]),
 		numCols+1,
 	)
 
@@ -246,22 +296,27 @@ func (r *CockroachDBConnector[T, ID]) BatchUpdate(ctx context.Context, items []T
 
 	defer func() {
 		if err != nil {
-			_ = tx.Rollback(ctx)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				// TODO: Log rollback error: rollbackErr
+			}
 		} else {
-			_ = tx.Commit(ctx)
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				// TODO: Log commit error: commitErr
+				err = commitErr // Set error so it gets returned
+			}
 		}
 	}()
 
 	numCols := len(r.columns)
 	var setClauses []string
 	for i := 1; i < numCols; i++ {
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", r.columns[i], i))
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", quoteIdentifier(r.columns[i]), i))
 	}
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = $%d",
-		r.tableName,
+		quoteIdentifier(r.tableName),
 		strings.Join(setClauses, ", "),
-		r.columns[0],
+		quoteIdentifier(r.columns[0]),
 		numCols+1,
 	)
 
@@ -278,13 +333,13 @@ func (r *CockroachDBConnector[T, ID]) BatchUpdate(ctx context.Context, items []T
 
 		id := r.getID(&item)
 		args := append(values[1:], id)
-		ct, err := r.pool.Exec(ctx, "batch_update_stmt", args...)
+		ct, err := tx.Exec(ctx, "batch_update_stmt", args...)
 		if err != nil {
 			return err
 		}
 
 		if ct.RowsAffected() == 0 {
-			return errors.New(fmt.Sprintf("batch update item %v does not exist", item))
+			return fmt.Errorf("batch update item %v does not exist", item)
 		}
 	}
 
@@ -293,8 +348,8 @@ func (r *CockroachDBConnector[T, ID]) BatchUpdate(ctx context.Context, items []T
 
 func (r *CockroachDBConnector[T, ID]) Delete(ctx context.Context, id ID) error {
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s = $1",
-		r.tableName,
-		r.columns[0],
+		quoteIdentifier(r.tableName),
+		quoteIdentifier(r.columns[0]),
 	)
 
 	ct, err := r.pool.Exec(ctx, query, id)
@@ -317,15 +372,20 @@ func (r *CockroachDBConnector[T, ID]) BatchDelete(ctx context.Context, items []I
 
 	defer func() {
 		if err != nil {
-			_ = tx.Rollback(ctx)
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				// TODO: Log rollback error: rollbackErr
+			}
 		} else {
-			_ = tx.Commit(ctx)
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				// TODO: Log commit error: commitErr
+				err = commitErr // Set error so it gets returned
+			}
 		}
 	}()
 
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s = $1",
-		r.tableName,
-		r.columns[0],
+		quoteIdentifier(r.tableName),
+		quoteIdentifier(r.columns[0]),
 	)
 	_, err = tx.Prepare(ctx, "batch_delete_stmt", query)
 	if err != nil {
@@ -333,12 +393,12 @@ func (r *CockroachDBConnector[T, ID]) BatchDelete(ctx context.Context, items []I
 	}
 
 	for _, id := range items {
-		ct, err := r.pool.Exec(ctx, "batch_delete_stmt", id)
+		ct, err := tx.Exec(ctx, "batch_delete_stmt", id)
 		if err != nil {
 			return err
 		}
 		if ct.RowsAffected() == 0 {
-			return errors.New(fmt.Sprintf("%v row not deleted", id))
+			return fmt.Errorf("%v row not deleted", id)
 		}
 	}
 
@@ -348,19 +408,29 @@ func (r *CockroachDBConnector[T, ID]) BatchDelete(ctx context.Context, items []I
 func (r *CockroachDBConnector[T, ID]) queryBuilder(filter *Filter) (string, []any) {
 	whereClause := ""
 	var args []any
+	
+	if filter == nil || len(filter.Conditions) == 0 {
+		// Sin condiciones, devolver query simple
+		query := fmt.Sprintf("SELECT %s FROM %s",
+			joinQuotedColumns(r.columns),
+			quoteIdentifier(r.tableName),
+		)
+		return query, args
+	}
+	
 	for i, condition := range filter.Conditions {
 		if i == 0 {
 			whereClause = "WHERE "
 		} else {
 			whereClause += " AND "
 		}
-		whereClause += fmt.Sprintf("%s %s $%d", condition.Field, condition.Operator, i+1)
+		whereClause += fmt.Sprintf("%s %s $%d", quoteIdentifier(condition.Field), condition.Operator, i+1)
 		args = append(args, condition.Value)
 	}
 
 	query := fmt.Sprintf("SELECT %s FROM %s %s",
-		joinColumns(r.columns),
-		r.tableName,
+		joinQuotedColumns(r.columns),
+		quoteIdentifier(r.tableName),
 		whereClause,
 	)
 

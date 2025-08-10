@@ -20,12 +20,15 @@ func NewRedisConnector[T any, ID comparable](client *redis.Client, defaultTTL ti
 }
 
 func (r *RedisConnector[T, ID]) Create(ctx context.Context, item *T) error {
+	if item == nil {
+		return errors.New("item cannot be nil")
+	}
 	key := r.keyFunc(r.getID(item))
 	data, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	return r.client.Set(ctx, key, string(data), r.defaultTTL).Err()
+	return r.client.Set(ctx, key, data, r.defaultTTL).Err()
 }
 
 func (r *RedisConnector[T, ID]) Get(ctx context.Context, id ID) (*T, error) {
@@ -47,14 +50,32 @@ func (r *RedisConnector[T, ID]) Get(ctx context.Context, id ID) (*T, error) {
 }
 
 func (r *RedisConnector[T, ID]) BatchCreate(ctx context.Context, items []T) error {
-	pipe := r.client.Pipeline()
+	if len(items) == 0 {
+		return nil
+	}
+	
+	// Preparar todos los datos primero
+	var commands []struct {
+		key  string
+		data []byte
+	}
+	
 	for _, item := range items {
 		key := r.keyFunc(r.getID(&item))
 		data, err := json.Marshal(item)
 		if err != nil {
 			return err
 		}
-		pipe.Set(ctx, key, data, r.defaultTTL)
+		commands = append(commands, struct {
+			key  string
+			data []byte
+		}{key, data})
+	}
+	
+	// Ahora ejecutar todas las operaciones
+	pipe := r.client.Pipeline()
+	for _, cmd := range commands {
+		pipe.Set(ctx, cmd.key, cmd.data, r.defaultTTL)
 	}
 	_, err := pipe.Exec(ctx)
 	return err
@@ -65,10 +86,16 @@ func (r *RedisConnector[T, ID]) Query(_ context.Context, _ *Filter) ([]T, error)
 }
 
 func (r *RedisConnector[T, ID]) Update(ctx context.Context, item *T) error {
+	if item == nil {
+		return errors.New("item cannot be nil")
+	}
 	return r.Create(ctx, item)
 }
 
 func (r *RedisConnector[T, ID]) BatchUpdate(ctx context.Context, items []T) error {
+	if len(items) == 0 {
+		return nil
+	}
 	return r.BatchCreate(ctx, items)
 }
 
@@ -78,6 +105,9 @@ func (r *RedisConnector[T, ID]) Delete(ctx context.Context, id ID) error {
 }
 
 func (r *RedisConnector[T, ID]) BatchDelete(ctx context.Context, items []ID) error {
+	if len(items) == 0 {
+		return nil
+	}
 	pipe := r.client.Pipeline()
 	for _, item := range items {
 		key := r.keyFunc(item)
