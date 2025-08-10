@@ -271,7 +271,7 @@ func (r *CockroachDBConnector[T, ID]) Update(ctx context.Context, item *T) error
 		quoteIdentifier(r.tableName),
 		strings.Join(setClause, ", "),
 		quoteIdentifier(r.columns[0]),
-		numCols+1,
+		numCols,
 	)
 
 	id := r.getID(item)
@@ -317,7 +317,7 @@ func (r *CockroachDBConnector[T, ID]) BatchUpdate(ctx context.Context, items []T
 		quoteIdentifier(r.tableName),
 		strings.Join(setClauses, ", "),
 		quoteIdentifier(r.columns[0]),
-		numCols+1,
+		numCols,
 	)
 
 	_, err = tx.Prepare(ctx, "batch_update_stmt", query)
