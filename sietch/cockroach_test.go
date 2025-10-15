@@ -116,15 +116,18 @@ func TestCockroachDBConnector_queryBuilder(t *testing.T) {
 	filter := &Filter{
 		Conditions: []Condition{
 			{
-				Field:    "email",
-				Operator: "=",
-				Value:    "test@test.com",
+				Field:    "balance",
+				Operator: OpEqual,
+				Value:    100,
 			},
 		},
 	}
 
-	query, _ := conn.queryBuilder(filter)
-	expected := `SELECT "id", "balance" FROM "test" WHERE "email" = $1`
+	query, _, err := conn.queryBuilder(filter)
+	if err != nil {
+		t.Fatalf("queryBuilder failed: %v", err)
+	}
+	expected := `SELECT "id", "balance" FROM "test" WHERE "balance" = $1`
 	if query != expected {
 		t.Errorf("expected: %s, got: %s", expected, query)
 	}

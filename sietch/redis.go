@@ -101,7 +101,14 @@ func (r *RedisConnector[T, ID]) BatchUpdate(ctx context.Context, items []T) erro
 
 func (r *RedisConnector[T, ID]) Delete(ctx context.Context, id ID) error {
 	key := r.keyFunc(id)
-	return r.client.Del(ctx, key).Err()
+	result, err := r.client.Del(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+	if result == 0 {
+		return ErrItemNotFound
+	}
+	return nil
 }
 
 func (r *RedisConnector[T, ID]) BatchDelete(ctx context.Context, items []ID) error {
@@ -115,4 +122,36 @@ func (r *RedisConnector[T, ID]) BatchDelete(ctx context.Context, items []ID) err
 	}
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// Count is not supported by Redis connector
+func (r *RedisConnector[T, ID]) Count(_ context.Context, _ *Filter) (int64, error) {
+	return 0, ErrUnsupportedOperation
+}
+
+// WithTx is not supported by Redis connector
+func (r *RedisConnector[T, ID]) WithTx(_ context.Context, _ TxFunc[T, ID]) error {
+	return ErrUnsupportedOperation
+}
+
+// Exists checks if an entity with the given ID exists in Redis
+func (r *RedisConnector[T, ID]) Exists(ctx context.Context, id ID) (bool, error) {
+	key := r.keyFunc(id)
+	result, err := r.client.Exists(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+	return result > 0, nil
+}
+
+// Upsert creates a new entity or updates an existing one in Redis
+// For Redis, this is the same as Create/Update since SET always upserts
+func (r *RedisConnector[T, ID]) Upsert(ctx context.Context, item *T) error {
+	return r.Create(ctx, item)
+}
+
+// BatchUpsert creates or updates multiple entities in Redis
+// For Redis, this is the same as BatchCreate since SET always upserts
+func (r *RedisConnector[T, ID]) BatchUpsert(ctx context.Context, items []T) error {
+	return r.BatchCreate(ctx, items)
 }

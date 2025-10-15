@@ -147,8 +147,11 @@ func TestCockroachDBConnector_QueryWithConditionsFormat(t *testing.T) {
 		},
 	}
 	
-	query, args := conn.queryBuilder(filter)
-	
+	query, args, err := conn.queryBuilder(filter)
+	if err != nil {
+		t.Fatalf("queryBuilder failed: %v", err)
+	}
+
 	expectedQuery := `SELECT "id", "balance" FROM "customers" WHERE "balance" > $1 AND "id" <= $2`
 	if query != expectedQuery {
 		t.Errorf("Query with conditions format incorrect:\nExpected: %s\nGot: %s", expectedQuery, query)
@@ -172,8 +175,11 @@ func TestCockroachDBConnector_QueryEmptyFilterFormat(t *testing.T) {
 	
 	filter := &Filter{Conditions: []Condition{}}
 	
-	query, args := conn.queryBuilder(filter)
-	
+	query, args, err := conn.queryBuilder(filter)
+	if err != nil {
+		t.Fatalf("queryBuilder failed: %v", err)
+	}
+
 	expectedQuery := `SELECT "id", "balance" FROM "products"`
 	if query != expectedQuery {
 		t.Errorf("Query with empty filter format incorrect:\nExpected: %s\nGot: %s", expectedQuery, query)
@@ -188,8 +194,11 @@ func TestCockroachDBConnector_QueryEmptyFilterFormat(t *testing.T) {
 func TestCockroachDBConnector_QueryNilFilterFormat(t *testing.T) {
 	conn := createQueryTestConnector(t, "inventory")
 	
-	query, args := conn.queryBuilder(nil)
-	
+	query, args, err := conn.queryBuilder(nil)
+	if err != nil {
+		t.Fatalf("queryBuilder failed: %v", err)
+	}
+
 	expectedQuery := `SELECT "id", "balance" FROM "inventory"`
 	if query != expectedQuery {
 		t.Errorf("Query with nil filter format incorrect:\nExpected: %s\nGot: %s", expectedQuery, query)
@@ -210,8 +219,11 @@ func TestCockroachDBConnector_QuerySingleConditionFormat(t *testing.T) {
 		},
 	}
 	
-	query, args := conn.queryBuilder(filter)
-	
+	query, args, err := conn.queryBuilder(filter)
+	if err != nil {
+		t.Fatalf("queryBuilder failed: %v", err)
+	}
+
 	expectedQuery := `SELECT "id", "balance" FROM "transactions" WHERE "balance" = $1`
 	if query != expectedQuery {
 		t.Errorf("Query with single condition format incorrect:\nExpected: %s\nGot: %s", expectedQuery, query)
@@ -239,8 +251,11 @@ func TestCockroachDBConnector_QueryMultipleOperatorsFormat(t *testing.T) {
 		},
 	}
 	
-	query, args := conn.queryBuilder(filter)
-	
+	query, args, err := conn.queryBuilder(filter)
+	if err != nil {
+		t.Fatalf("queryBuilder failed: %v", err)
+	}
+
 	expectedQuery := `SELECT "id", "balance" FROM "accounts" WHERE "balance" >= $1 AND "id" != $2 AND "balance" < $3`
 	if query != expectedQuery {
 		t.Errorf("Query with multiple operators format incorrect:\nExpected: %s\nGot: %s", expectedQuery, query)
@@ -393,8 +408,11 @@ func TestCockroachDBConnector_FilterFieldQuoting(t *testing.T) {
 		},
 	}
 	
-	query, _ := conn.queryBuilder(filter)
-	
+	query, _, err := conn.queryBuilder(filter)
+	if err != nil {
+		t.Fatalf("queryBuilder failed: %v", err)
+	}
+
 	// Check that field names in conditions are quoted
 	if !strings.Contains(query, `"balance" =`) {
 		t.Errorf("Filter field 'balance' not properly quoted in query: %s", query)
