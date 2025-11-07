@@ -3,7 +3,10 @@ package httpx
 import (
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/seb7887/gofw/httpx/observability"
 	"github.com/seb7887/gofw/httpx/policy"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ClientOption configures a Client during creation.
@@ -78,72 +81,118 @@ func WithPolicy(p policy.Policy) ClientOption {
 	}
 }
 
-// TODO: These options will be implemented when we create the actual policies
-
 // WithCircuitBreaker adds a circuit breaker policy to prevent cascading failures.
 // The circuit breaker tracks error rates and opens when thresholds are exceeded.
 //
-// NOTE: Not yet implemented - will be added with CircuitBreakerPolicy
-// func WithCircuitBreaker(config CircuitBreakerConfig) ClientOption {
-//     return &funcClientOption{
-//         f: func(c *Client) {
-//             // TODO: Create and add CircuitBreakerPolicy
-//         },
-//     }
-// }
+// Example:
+//
+//	client := httpx.NewClient(
+//	    httpx.WithCircuitBreaker(httpx.CircuitBreakerConfig{
+//	        ErrorThreshold: 50,
+//	        MinRequests: 10,
+//	        SleepWindow: 5 * time.Second,
+//	        SuccessThreshold: 2,
+//	    }),
+//	)
+func WithCircuitBreaker(config policy.CircuitBreakerConfig) ClientOption {
+	return &funcClientOption{
+		f: func(c *Client) {
+			c.policies = append(c.policies, policy.NewCircuitBreakerPolicy(config))
+		},
+	}
+}
 
 // WithRetry adds a retry policy with configurable backoff strategies.
 // Failed requests will be retried according to the configuration.
 //
-// NOTE: Not yet implemented - will be added with RetryPolicy
-// func WithRetry(config RetryConfig) ClientOption {
-//     return &funcClientOption{
-//         f: func(c *Client) {
-//             // TODO: Create and add RetryPolicy
-//         },
-//     }
-// }
+// Example:
+//
+//	client := httpx.NewClient(
+//	    httpx.WithRetry(httpx.RetryConfig{
+//	        MaxAttempts: 3,
+//	        Backoff: httpx.NewExponentialBackoff(),
+//	    }),
+//	)
+func WithRetry(config policy.RetryConfig) ClientOption {
+	return &funcClientOption{
+		f: func(c *Client) {
+			c.policies = append(c.policies, policy.NewRetryPolicy(config))
+		},
+	}
+}
 
 // WithTimeout adds timeout controls at multiple levels (connection, request, etc).
 //
-// NOTE: Not yet implemented - will be added with TimeoutPolicy
-// func WithTimeout(config TimeoutConfig) ClientOption {
-//     return &funcClientOption{
-//         f: func(c *Client) {
-//             // TODO: Create and add TimeoutPolicy
-//         },
-//     }
-// }
+// Example:
+//
+//	client := httpx.NewClient(
+//	    httpx.WithTimeout(httpx.TimeoutConfig{
+//	        Request: 10 * time.Second,
+//	    }),
+//	)
+func WithTimeout(config policy.TimeoutConfig) ClientOption {
+	return &funcClientOption{
+		f: func(c *Client) {
+			c.policies = append(c.policies, policy.NewTimeoutPolicy(config))
+		},
+	}
+}
 
 // WithBulkhead adds concurrency limiting to prevent resource exhaustion.
 //
-// NOTE: Not yet implemented - will be added with BulkheadPolicy
-// func WithBulkhead(maxConcurrent int) ClientOption {
-//     return &funcClientOption{
-//         f: func(c *Client) {
-//             // TODO: Create and add BulkheadPolicy
-//         },
-//     }
-// }
+// Example:
+//
+//	client := httpx.NewClient(
+//	    httpx.WithBulkhead(httpx.BulkheadConfig{
+//	        MaxConcurrent: 100,
+//	        PerHost: true,
+//	    }),
+//	)
+func WithBulkhead(config policy.BulkheadConfig) ClientOption {
+	return &funcClientOption{
+		f: func(c *Client) {
+			c.policies = append(c.policies, policy.NewBulkheadPolicy(config))
+		},
+	}
+}
 
 // WithOTEL enables OpenTelemetry distributed tracing.
+// The instrumentation policy should typically be added first in the policy chain
+// to ensure all subsequent policies are traced.
 //
-// NOTE: Not yet implemented - will be added with observability integration
-// func WithOTEL(provider trace.TracerProvider) ClientOption {
-//     return &funcClientOption{
-//         f: func(c *Client) {
-//             // TODO: Configure OTEL instrumentation
-//         },
-//     }
-// }
+// Example:
+//
+//	client := httpx.NewClient(
+//	    httpx.WithOTEL(otelProvider),
+//	    httpx.WithRetry(...),
+//	    httpx.WithCircuitBreaker(...),
+//	)
+func WithOTEL(provider trace.TracerProvider) ClientOption {
+	return &funcClientOption{
+		f: func(c *Client) {
+			c.policies = append(c.policies, policy.NewInstrumentationPolicy(provider))
+		},
+	}
+}
 
 // WithMetrics enables Prometheus metrics collection.
+// The metrics policy should typically be added early in the policy chain
+// (after instrumentation if using OTEL) to capture metrics from all policies.
 //
-// NOTE: Not yet implemented - will be added with metrics integration
-// func WithMetrics(registry *prometheus.Registry) ClientOption {
-//     return &funcClientOption{
-//         f: func(c *Client) {
-//             // TODO: Configure Prometheus metrics
-//         },
-//     }
-// }
+// Example:
+//
+//	registry := prometheus.NewRegistry()
+//	client := httpx.NewClient(
+//	    httpx.WithOTEL(otelProvider),
+//	    httpx.WithMetrics(registry),
+//	    httpx.WithRetry(...),
+//	    httpx.WithCircuitBreaker(...),
+//	)
+func WithMetrics(registry prometheus.Registerer) ClientOption {
+	return &funcClientOption{
+		f: func(c *Client) {
+			collector := observability.NewMetricsCollector(registry)
+			c.policies = append(c.policies, policy.NewMetricsPolicy(collector))
+		},
+	}
+}
