@@ -63,8 +63,8 @@ func (fo *funcOption) apply(cfg *requestConfig) {
 	fo.f(cfg)
 }
 
-// WithTimeout overrides the client's default timeout for this specific request.
-func WithTimeout(d time.Duration) RequestOption {
+// WithRequestTimeout overrides the client's default timeout for this specific request.
+func WithRequestTimeout(d time.Duration) RequestOption {
 	return &funcOption{
 		f: func(cfg *requestConfig) {
 			cfg.timeout = &d
